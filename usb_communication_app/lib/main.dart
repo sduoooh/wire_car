@@ -60,12 +60,12 @@ class ModeChoosePageState extends State<ModeChoosePage> {
           break;
         case 2:
           setState(() {
-            _usbStatus = UsbDeviceStatus.connected;
+            _usbStatus = UsbDeviceStatus.rejected;
           });
           break;
-        default:
+        case 3:
           setState(() {
-            _usbStatus = UsbDeviceStatus.noDevice;
+            _usbStatus = UsbDeviceStatus.connected;
           });
           break;
       }
@@ -147,10 +147,6 @@ class ModeChoosePageState extends State<ModeChoosePage> {
 
   Widget _buildUsbStatusIcon() {
     switch (_usbStatus) {
-      case UsbDeviceStatus.noDevice:
-        return const Icon(Icons.close, color: Colors.red);
-      case UsbDeviceStatus.unauthorized:
-        return const Icon(Icons.help_outline, color: Colors.orange);
       case UsbDeviceStatus.connected:
         switch (_mode) {
           case Mode.choose:
@@ -170,6 +166,8 @@ class ModeChoosePageState extends State<ModeChoosePage> {
               },
             );
         }
+      default:
+        return const Icon(Icons.close, color: Colors.red);
     }
   }
 
@@ -190,8 +188,10 @@ class ModeChoosePageState extends State<ModeChoosePage> {
         return const Text('正在等待设备连接...');
       case UsbDeviceStatus.unauthorized:
         return const Text('正在获取设备授权...');
-      default:
-        return const Text('');
+      case UsbDeviceStatus.rejected:
+        return const Text('获取设备授权失败...');
+      case UsbDeviceStatus.connected:
+        return const Text('设备已连接');
     }
   }
 
@@ -223,6 +223,7 @@ class ModeChoosePageState extends State<ModeChoosePage> {
 enum UsbDeviceStatus {
   noDevice,
   unauthorized,
+  rejected,
   connected,
 }
 

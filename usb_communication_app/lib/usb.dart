@@ -60,9 +60,9 @@ class Usb {
       await _port!.setRTS(true);
       await _port!.setPortParameters(
           9600, UsbPort.DATABITS_8, UsbPort.STOPBITS_1, UsbPort.PARITY_NONE);
-      sendPort.send(2);
+      sendPort.send(3);
     } catch (e) {
-      sendPort.send(1);
+      sendPort.send(2);
     }
   }
 
