@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:usb_serial/usb_serial.dart';
-import 'dart:typed_data';
+import 'usb.dart';
+import 'dart:isolate';
+
+import 'debug_page.dart';
+import 'server_page.dart';
 
 void main() {
-  runApp(const MyApp());
+  runApp(const UsbApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({Key? key}) : super(key: key);
+class UsbApp extends StatelessWidget {
+  const UsbApp({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -16,125 +19,130 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      home: const UsbCommunicationPage(),
+      home: const ModeChoosePage(),
     );
   }
 }
 
-class UsbCommunicationPage extends StatefulWidget {
-  const UsbCommunicationPage({Key? key}) : super(key: key);
+class ModeChoosePage extends StatefulWidget {
+  const ModeChoosePage({Key? key}) : super(key: key);
 
   @override
-  UsbCommunicationPageState createState() => UsbCommunicationPageState();
+  ModeChoosePageState createState() => ModeChoosePageState();
 }
 
-class UsbCommunicationPageState extends State<UsbCommunicationPage> {
-  List<String> messages = [];
-  final TextEditingController _controller = TextEditingController();
-  UsbPort? _port;
+class ModeChoosePageState extends State<ModeChoosePage> {
+  bool _isTopPressed = false;
+  bool _isBottomPressed = false;
   UsbDeviceStatus _usbStatus = UsbDeviceStatus.noDevice;
+  Mode _mode = Mode.choose;
+
+  late Usb usb;
+  late ReceivePort receivePort;
 
   @override
   void initState() {
     super.initState();
-    _connectToUsbDevice();
-  }
+    receivePort = ReceivePort();
+    usb = Usb(receivePort.sendPort);
 
-  Future<void> _connectToUsbDevice() async {
-    List<UsbDevice> devices = await UsbSerial.listDevices();
-    if (devices.isEmpty) {
-      setState(() {
-        _usbStatus = UsbDeviceStatus.noDevice;
-      });
-      return;
-    }
-
-    setState(() {
-      _usbStatus = UsbDeviceStatus.unauthorized;
+    receivePort.listen((message) {
+      switch (message) {
+        case 0:
+          setState(() {
+            _usbStatus = UsbDeviceStatus.noDevice;
+          });
+          break;
+        case 1:
+          setState(() {
+            _usbStatus = UsbDeviceStatus.unauthorized;
+          });
+          break;
+        case 2:
+          setState(() {
+            _usbStatus = UsbDeviceStatus.connected;
+          });
+          break;
+        default:
+          setState(() {
+            _usbStatus = UsbDeviceStatus.noDevice;
+          });
+          break;
+      }
     });
-
-    try {
-      _port = await devices[0].create();
-      await _port!.open();
-      await _port!.setDTR(true);
-      await _port!.setRTS(true);
-      _port!.setPortParameters(9600, UsbPort.DATABITS_8, UsbPort.STOPBITS_1, UsbPort.PARITY_NONE);
-
-      setState(() {
-        _usbStatus = UsbDeviceStatus.connected;
-      });
-
-      _port!.inputStream!.listen((Uint8List data) {
-        String message = String.fromCharCodes(data);
-        setState(() {
-          messages.add(message);
-          if (messages.length > 5) {
-            messages.removeAt(0);
-          }
-        });
-      });
-    } catch (e) {
-      setState(() {
-        _usbStatus = UsbDeviceStatus.unauthorized;
-      });
-    }
-  }
-
-  void _sendMessage() {
-    if (_port != null && _controller.text.isNotEmpty) {
-      _port!.write(Uint8List.fromList(_controller.text.codeUnits));
-      _controller.clear();
-    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('USB通信应用'),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 16.0),
-            child: _buildUsbStatusIcon(),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: ListView.builder(
-              reverse: true,
-              itemCount: messages.length,
-              itemBuilder: (context, index) {
-                return ListTile(
-                  title: Text(messages[messages.length - 1 - index]),
-                );
-              },
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _controller,
-                    decoration: const InputDecoration(
-                      hintText: '输入消息...',
+    switch (_usbStatus) {
+      case UsbDeviceStatus.connected:
+        switch (_mode) {
+          case Mode.choose:
+            return Scaffold(
+              body: Column(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTapDown: (_) => setState(() => _isTopPressed = true),
+                      onTapUp: (_) => setState(() {
+                        _isTopPressed = false;
+                        _mode = Mode.debug;
+                      }),
+                      onTapCancel: () => setState(() => _isTopPressed = false),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        color: _isTopPressed ? Colors.green : Colors.white,
+                        child: const Center(
+                          child: Text('调试模式'),
+                        ),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                ElevatedButton(
-                  onPressed: _sendMessage,
-                  child: const Text('发送'),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
+                  Container(
+                    height: 2,
+                    color: Colors.black,
+                  ),
+                  Expanded(
+                    child: GestureDetector(
+                      onTapDown: (_) => setState(() => _isBottomPressed = true),
+                      onTapUp: (_) => setState(() {
+                        _isBottomPressed = false;
+                        _mode = Mode.server;
+                      }),
+                      onTapCancel: () =>
+                          setState(() => _isBottomPressed = false),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        color: _isBottomPressed ? Colors.green : Colors.white,
+                        child: const Center(
+                          child: Text('遥控模式'),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          default:
+            return Scaffold(
+              appBar: AppBar(
+                title: _getTitle(),
+                actions: [
+                  Padding(
+                    padding: const EdgeInsets.only(right: 16.0),
+                    child: _buildUsbStatusIcon(),
+                  ),
+                ],
+              ),
+              body: _getPage(),
+            );
+        }
+      default:
+        return Scaffold(
+            body: Center(
+          child: _getText(),
+        ));
+    }
   }
 
   Widget _buildUsbStatusIcon() {
@@ -144,13 +152,70 @@ class UsbCommunicationPageState extends State<UsbCommunicationPage> {
       case UsbDeviceStatus.unauthorized:
         return const Icon(Icons.help_outline, color: Colors.orange);
       case UsbDeviceStatus.connected:
-        return const Icon(Icons.check, color: Colors.green);
+        switch (_mode) {
+          case Mode.choose:
+            return const Icon(Icons.check, color: Colors.green);
+          case Mode.debug:
+            return IconButton(
+              icon: const Icon(Icons.bug_report, color: Colors.black),
+              onPressed: () {
+                _changePage(Mode.server);
+              },
+            );
+          case Mode.server:
+            return IconButton(
+              icon: const Icon(Icons.wifi, color: Colors.green),
+              onPressed: () {
+                _changePage(Mode.debug);
+              },
+            );
+        }
     }
+  }
+
+  Widget _getPage() {
+    switch (_mode) {
+      case Mode.debug:
+        return DebugPage(usb: usb);
+      case Mode.server:
+        return const ServerPage();
+      case Mode.choose:
+        return const ServerPage();
+    }
+  }
+
+  Widget _getText() {
+    switch (_usbStatus) {
+      case UsbDeviceStatus.noDevice:
+        return const Text('正在等待设备连接...');
+      case UsbDeviceStatus.unauthorized:
+        return const Text('正在获取设备授权...');
+      default:
+        return const Text('');
+    }
+  }
+
+  Widget _getTitle() {
+    switch (_mode) {
+      case Mode.debug:
+        return const Text('调试模式');
+      case Mode.server:
+        return const Text('遥控模式');
+      case Mode.choose:
+        return const Text('选择模式');
+    }
+  }
+
+  void _changePage(Mode mode) {
+    setState(() {
+      _mode = mode;
+    });
   }
 
   @override
   void dispose() {
-    _port?.close();
+    receivePort.close();
+    usb.dispose();
     super.dispose();
   }
 }
@@ -159,4 +224,10 @@ enum UsbDeviceStatus {
   noDevice,
   unauthorized,
   connected,
+}
+
+enum Mode {
+  choose,
+  debug,
+  server,
 }
