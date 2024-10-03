@@ -78,5 +78,6 @@ class Usb {
       messageSubscription.cancel();
     }
     messageSubscriptionInit = false;
+    
   }
 }

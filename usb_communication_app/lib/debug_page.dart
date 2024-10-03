@@ -91,6 +91,7 @@ class DebugPageState extends State<DebugPage> {
 
   @override
   void dispose() {
+    receivePort.close();
     super.dispose();
   }
 }
